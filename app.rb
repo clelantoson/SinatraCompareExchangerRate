@@ -52,6 +52,20 @@ def correct_date_for_visa
   end
 end
 
+# revolut
+  revolut_response = HTTParty.get("https://www.revolut.com/api/exchange/quote?",
+    query: {
+      isRecipientAmount: false,
+      fromCurrency: from_currency,
+      toCurrency: to_currency,
+      amount: amount.to_i * 100,
+      country: "FR",
+    },
+    headers: {
+      "accept-language": "fr",
+    }
+  )
+
 
   visa_response = HTTParty.get("https://www.visa.fr/cmsapi/fx/rates?utcConvertedDate=#{correct_date_for_visa}&exchangedate=#{correct_date_for_visa}",
     query: {
@@ -79,15 +93,13 @@ end
   )
 
 
-
-
-
- # Vérifier si les deux réponses sont réussies
-  if visa_response.success? && mastercard_response.success?
+  if visa_response.success? && mastercard_response.success? && revolut_response.success?
     visa_result = JSON.parse(visa_response.body)
     mastercard_result = JSON.parse(mastercard_response.body)
+    revolut_result = JSON.parse(revolut_response.body)
 
-    # Combiner les résultats dans un seul objet
+    binding.pry
+
     combined_result = {
       visa: {
         conversion_rate: visa_result['originalValues']['fxRateVisa'],
@@ -96,6 +108,10 @@ end
       mastercard: {
         conversion_rate: mastercard_result['data']['conversionRate'],
         converted_amount: mastercard_result['data']['crdhldBillAmt']
+      },
+      revolut: {
+        conversion_rate: revolut_result['rate']['rate'],
+        converted_amount: revolut_result['recipient']['amount']
       }
     }
 
@@ -110,13 +126,13 @@ end
   elsif !mastercard_response.success?
     status 500
     return { error: "Erreur lors de la récupération des taux de change de Mastercard" }.to_json
+
+  elsif !revolut_response.success?
+    binding.pry
+    status 500
+    return { error: "Erreur lors de la récupération des taux de change de Revolut" }.to_json
   end
+
 end
 
 
-
-# visa
-# https://www.visa.fr/cmsapi/fx/rates?amount=1000&fee=0&utcConvertedDate=09%2F18%2F2024&exchangedate=09%2F18%2F2024&fromCurr=EUR&toCurr=JPY
-
-# revolut
-# https://www.revolut.com/api/exchange/quote?amount=100000&country=FR&fromCurrency=JPY&isRecipientAmount=false&toCurrency=EUR
