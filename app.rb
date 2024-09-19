@@ -46,13 +46,13 @@ def correct_date_for_visa
   current_time_utc = Time.now.utc
 
   if current_time_after_midnight_utc?
-    current_time_utc.strftime('%m-%d-%Y').gsub('-', '%2F') # Date du jour
+    current_time_utc.strftime('%m-%d-%Y').gsub('-', '%2F') # today date
   else
-    (current_time_utc - 1).strftime('%m-%d-%Y').gsub('-', '%2F') # Date d'hier
+    (current_time_utc - 1).strftime('%m-%d-%Y').gsub('-', '%2F') # yesterday date
   end
 end
 
-# revolut
+
   revolut_response = HTTParty.get("https://www.revolut.com/api/exchange/quote?",
     query: {
       isRecipientAmount: false,
@@ -92,13 +92,10 @@ end
     }
   )
 
-
   if visa_response.success? && mastercard_response.success? && revolut_response.success?
     visa_result = JSON.parse(visa_response.body)
     mastercard_result = JSON.parse(mastercard_response.body)
     revolut_result = JSON.parse(revolut_response.body)
-
-    binding.pry
 
     combined_result = {
       visa: {
@@ -117,12 +114,11 @@ end
 
     return combined_result.to_json
 
-  # Gérer les erreurs pour Visa
+
   elsif !visa_response.success?
     status 500
     return { error: "Erreur lors de la récupération des taux de change de Visa" }.to_json
 
-  # Gérer les erreurs pour Mastercard
   elsif !mastercard_response.success?
     status 500
     return { error: "Erreur lors de la récupération des taux de change de Mastercard" }.to_json
