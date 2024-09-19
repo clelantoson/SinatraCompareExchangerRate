@@ -92,25 +92,38 @@ end
     }
   )
 
+  def format_and_combine_results(visa_result, mastercard_result, revolut_result)
+    visa_conversion_rate = visa_result['originalValues']['fxRateVisa'].to_f.round(2)
+    visa_converted_amount = visa_result['originalValues']['toAmountWithAdditionalFee'].to_f.round(2)
+
+    mastercard_conversion_rate = mastercard_result['data']['conversionRate'].round(2)
+    mastercard_converted_amount = mastercard_result['data']['crdhldBillAmt'].round(2)
+
+    revolut_conversion_rate = revolut_result['rate']['rate'].round(2)
+    revolut_converted_amount = revolut_result['recipient']['amount'].round(2)
+
+    {
+      visa: {
+        conversion_rate: visa_conversion_rate,
+        converted_amount: visa_converted_amount,
+      },
+      mastercard: {
+        conversion_rate: mastercard_conversion_rate,
+        converted_amount: mastercard_converted_amount,
+      },
+      revolut: {
+        conversion_rate: revolut_conversion_rate,
+        converted_amount: revolut_converted_amount,
+      }
+    }
+  end
+
   if visa_response.success? && mastercard_response.success? && revolut_response.success?
     visa_result = JSON.parse(visa_response.body)
     mastercard_result = JSON.parse(mastercard_response.body)
     revolut_result = JSON.parse(revolut_response.body)
 
-    combined_result = {
-      visa: {
-        conversion_rate: visa_result['originalValues']['fxRateVisa'],
-        converted_amount: visa_result['originalValues']['toAmountWithAdditionalFee']
-      },
-      mastercard: {
-        conversion_rate: mastercard_result['data']['conversionRate'],
-        converted_amount: mastercard_result['data']['crdhldBillAmt']
-      },
-      revolut: {
-        conversion_rate: revolut_result['rate']['rate'],
-        converted_amount: revolut_result['recipient']['amount']
-      }
-    }
+    combined_result = format_and_combine_results(visa_result, mastercard_result, revolut_result)
 
     return combined_result.to_json
 
