@@ -6,13 +6,38 @@ require 'httparty'
 require 'json'
 require 'pry'
 require 'tzinfo'
+require 'sinatra/cors'
 
-get '/get_exchange_rate' do
-  content_type :json
+set :allow_origin, "http://localhost:8081" # Allow your frontend
+set :allow_methods, "GET"    # Define which methods are allowed
+set :allow_headers, "content-type"        # Specify allowed headers
 
-  from_currency = params[:from_currency]
-  to_currency = params[:to_currency]
-  amount = params[:amount]
+CURRENCIES_WITH_CENTS = [
+  "USD", # United States Dollar
+  "CAD", # Canadian Dollar
+  "AUD", # Australian Dollar
+  "NZD", # New Zealand Dollar
+  "SGD", # Singapore Dollar
+  "HKD", # Hong Kong Dollar
+  "EUR", # Euro
+  "GBP", # British Pound Sterling
+  "ZAR", # South African Rand
+  "MXN", # Mexican Peso
+  "ARS", # Argentine Peso
+  "CLP", # Chilean Peso
+  "COP", # Colombian Peso
+  "PEN", # Peruvian Sol
+  "CNY", # Chinese Yuan
+  "INR", # Indian Rupee
+  "PHP", # Philippine Peso
+  "MYR", # Malaysian Ringgit
+  "THB", # Thai Baht
+  "TWD"  # Taiwan Dollar
+].freeze
+
+CURRENCIES_WITHOUT_COMPUTING = [
+  "BRL", # Brazilian Real
+]
 
 
 # mastercard
@@ -52,13 +77,55 @@ def correct_date_for_visa
   end
 end
 
+def format_amount_revolut(amount)
+  amount.to_i
+end
+
+def format_and_combine_results(visa_result, mastercard_result, revolut_result, to_currency, from_currency, amount)
+  visa_conversion_rate = visa_result['originalValues']['fxRateVisa'].to_f
+  visa_converted_amount = visa_result['originalValues']['toAmountWithAdditionalFee'].to_f
+
+  mastercard_conversion_rate = mastercard_result['data']['conversionRate']
+  mastercard_converted_amount = mastercard_result['data']['crdhldBillAmt']
+
+  revolut_conversion_rate = revolut_result['rate']['rate']
+
+  revolut_converted_amount = revolut_conversion_rate.to_f * format_amount_revolut(amount)
+
+  {
+    visa: {
+      conversion_rate: visa_conversion_rate.round(2),
+      conversion_rate_inverse: (1 / visa_conversion_rate).round(2),
+      converted_amount: visa_converted_amount.round(2),
+    },
+    mastercard: {
+      conversion_rate: mastercard_conversion_rate.round(2),
+      conversion_rate_inverse: (1 / visa_conversion_rate).round(2),
+      converted_amount: mastercard_converted_amount.round(2),
+    },
+    revolut: {
+      conversion_rate: revolut_conversion_rate.round(2),
+      conversion_rate_inverse: (1 / visa_conversion_rate).round(2),
+      converted_amount: revolut_converted_amount.round(2),
+    },
+       from_currency: from_currency,
+       to_currency: to_currency,
+  }
+end
+
+get '/get_exchange_rate' do
+  content_type :json
+
+  from_currency = params[:from_currency]
+  to_currency = params[:to_currency]
+  amount = params[:amount]
 
   revolut_response = HTTParty.get("https://www.revolut.com/api/exchange/quote?",
     query: {
       isRecipientAmount: false,
       fromCurrency: from_currency,
       toCurrency: to_currency,
-      amount: amount.to_i * 100,
+      amount:format_amount_revolut(amount),
       country: "FR",
     },
     headers: {
@@ -92,38 +159,14 @@ end
     }
   )
 
-  def format_and_combine_results(visa_result, mastercard_result, revolut_result)
-    visa_conversion_rate = visa_result['originalValues']['fxRateVisa'].to_f.round(2)
-    visa_converted_amount = visa_result['originalValues']['toAmountWithAdditionalFee'].to_f.round(2)
 
-    mastercard_conversion_rate = mastercard_result['data']['conversionRate'].round(2)
-    mastercard_converted_amount = mastercard_result['data']['crdhldBillAmt'].round(2)
-
-    revolut_conversion_rate = revolut_result['rate']['rate'].round(2)
-    revolut_converted_amount = revolut_result['recipient']['amount'].round(2)
-
-    {
-      visa: {
-        conversion_rate: visa_conversion_rate,
-        converted_amount: visa_converted_amount,
-      },
-      mastercard: {
-        conversion_rate: mastercard_conversion_rate,
-        converted_amount: mastercard_converted_amount,
-      },
-      revolut: {
-        conversion_rate: revolut_conversion_rate,
-        converted_amount: revolut_converted_amount,
-      }
-    }
-  end
 
   if visa_response.success? && mastercard_response.success? && revolut_response.success?
     visa_result = JSON.parse(visa_response.body)
     mastercard_result = JSON.parse(mastercard_response.body)
     revolut_result = JSON.parse(revolut_response.body)
 
-    combined_result = format_and_combine_results(visa_result, mastercard_result, revolut_result)
+    combined_result = format_and_combine_results(visa_result, mastercard_result, revolut_result, to_currency, from_currency, amount)
 
     return combined_result.to_json
 
